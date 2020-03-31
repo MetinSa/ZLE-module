@@ -26,7 +26,7 @@ module comm_zodi_mod
     real(dp)     :: R_max, R_sat
     real(dp)     :: t1, t2
     real(dp), dimension(:), allocatable :: x, y, z
-    real(dp), dimension(:), allocatable :: blackbody, density
+    real(dp), dimension(:), allocatable :: blackbody, density, integrand
 
     ! =========================================================================
     !                      ZodiComponent Class Definition
@@ -169,15 +169,15 @@ contains
         ! Line-of-sight integration parameters
         R_max = 6            ! max radial integration distance from the Sun [AU]
         R_sat = 1.1          ! satellite radial distance from the Sun [AU]
-        n_LOS = 200           ! n integration steps
+        n_LOS = 50           ! n integration steps
 
         ! Zodi component selection
         use_cloud = .true.
-        use_band1 = .true.
-        use_band2 = .true.
-        use_band3 = .true.
-        use_ring = .true.
-        use_feature = .true.
+        use_band1 = .false.
+        use_band2 = .false.
+        use_band3 = .false.
+        use_ring = .false.
+        use_feature = .false.
 
         ! Initializing zodi components
         ! ---------------------------------------------------------------------
@@ -250,6 +250,7 @@ contains
         allocate(z(n_LOS))
         allocate(density(n_LOS))
         allocate(blackbody(n_LOS))
+        allocate(integrand(n_LOS))
 
         ! Precomputing ecliptic to galactic coordinates per pixels for all
         ! relevant nsides
@@ -339,7 +340,7 @@ contains
         real(dp)     :: dx, dy, dz
         real(dp)     :: s, ds
         real(dp)     :: R_squared, R_cos_theta, R_LOS
-        real(dp)     :: integrand
+        real(dp)     :: integral
         real(dp)     :: longitude_sat
         real(dp), dimension(:,:), allocatable :: coord_map
 
@@ -347,6 +348,7 @@ contains
         s_zodi(:,:) = 0.0
         density(:) = 0.0
         blackbody(:) = 0.0
+        integrand(:) = 0.0
 
         n_tod = size(pix,1)  ! n time-ordered data for current chunk
         n_det = size(pix,2)  ! n detectors
@@ -360,8 +362,10 @@ contains
         ! Computing the zodiacal emission for current time-ordered data chunk
         do j = 1, n_det
             ! Computing the consant terms in Planck's law B(T)
-            const1 = (2.d0*h*nu(j)**3)/(c*c)
-            const2 = (h*nu(j))/k_B
+            const1 = (2.d0*h*857.d9**3)/(c*c)
+            ! const1 = (2.d0*h*nu(j)**3)/(c*c)
+            const2 = (h*857.d9)/k_B
+            ! const2 = (h*nu(j))/k_B
 
             do i = 1, n_tod
                 ! Computing heliocentric satellite coordinates (x0, y0, z0)
@@ -401,7 +405,7 @@ contains
                     s = sqrt(x(k)**2 + y(k)**2 + z(k)**2)
 
                     ! Computing blackbody emission B(T) at radial distance s
-                    ! from the Sun
+                    ! from the Sun through the Planck function
                     blackbody(k) = const1/(exp(const2/(T0*s**(-delta))) - 1.d0)
                 end do
 
@@ -412,17 +416,22 @@ contains
                     ! Get density at given x, y, z coordinate along the line-of-sight
                     call comp%getDensity(x, y, z, density, longitude_sat)
 
-                    ! Computing the integrand (currently using simplified trapezoidal method)
-                    integrand = sum(density*blackbody)*ds*10**20
+                    ! Emission produced by the density
+                    integrand = density*blackbody
+
+                    ! Computing the integrand with the trapezoidal method
+                    call trapezoidal(integrand, ds, n_LOS, integral)
 
                     ! Saving emission
-                    s_zodi(i,j) = s_zodi(i,j) + integrand
+                    s_zodi(i,j) = s_zodi(i,j) + integral
 
                     comp => comp%next()
                 end do
             end do
         end do
 
+        ! Converting to MJs/sr before returning signal
+        s_zodi = s_zodi*1d20
     end subroutine compute_zodi_template
 
     ! =========================================================================
@@ -461,6 +470,19 @@ contains
         end do
     end function getCoordMap
 
+    subroutine trapezoidal(f, ds, n, result)
+        ! Trapezoidal integration method
+        implicit none
+
+        real(dp), dimension(:), intent(in) :: f
+        integer(i4b), intent(in)           :: n
+        real(dp), intent(in)               :: ds
+        real(dp), intent(out)              :: result
+
+        result = 0.5*f(1) + 0.5*f(n)
+        result = result + sum(f(2:n-1))
+        result = result*ds
+    end subroutine trapezoidal
 
     ! =========================================================================
     !                         Zodi Components Routines
