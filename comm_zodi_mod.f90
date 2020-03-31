@@ -16,6 +16,7 @@ module comm_zodi_mod
     !   """
     use comm_utils
     use comm_param_mod
+
     implicit none
 
     private
@@ -173,11 +174,11 @@ contains
 
         ! Zodi component selection
         use_cloud = .true.
-        use_band1 = .false.
-        use_band2 = .false.
-        use_band3 = .false.
-        use_ring = .false.
-        use_feature = .false.
+        use_band1 = .true.
+        use_band2 = .true.
+        use_band3 = .true.
+        use_ring = .true.
+        use_feature = .true.
 
         ! Initializing zodi components
         ! ---------------------------------------------------------------------
@@ -327,6 +328,7 @@ contains
         implicit none
 
         class(ZodiComponent), pointer :: comp
+
         integer(i4b),                   intent(in)  :: nside
         integer(i4b), dimension(1:,1:), intent(in)  :: pix
         real(dp),     dimension(2),     intent(in)  :: sat_pos
@@ -431,7 +433,7 @@ contains
         end do
 
         ! Converting to MJs/sr before returning signal
-        s_zodi = s_zodi*1d20
+        ! s_zodi = s_zodi*1d20
     end subroutine compute_zodi_template
 
     ! =========================================================================
